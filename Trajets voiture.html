@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Covoiturage</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .section { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+    label { display: block; margin-top: 8px; }
+    button { margin-top: 15px; padding: 8px 16px; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background-color: #f2f2f2; }
+    .debt { color: #d9534f; font-weight: bold; }
+    .ok { color: #5cb85c; font-weight: bold; }
+    .totaux { margin-top: 30px; border: 2px solid #000; }
+  </style>
+</head>
+<body>
+
+  <h1>💰 Gestion du covoiturage</h1>
+
+  <div class="section">
+    <h3>Infos du trajet</h3>
+
+    <label>Date du trajet :
+      <input type="date" id="dateTrajet" value="">
+    </label>
+
+    <label>Voiture utilisée :
+      <select id="voiture">
+        <option value="toi">Ta voiture</option>
+        <option value="vincent">Voiture de Vincent</option>
+      </select>
+    </label>
+
+    <label><input type="checkbox" id="toi" checked> Toi</label>
+    <label><input type="checkbox" id="maxime" checked> Maxime</label>
+    <label><input type="checkbox" id="vincent"> Vincent</label>
+
+    <label>Prix carburant (€/L) :
+      <input type="number" id="prix" value="1.80" step="0.01">
+    </label>
+
+    <label>Distance (km) :
+      <input type="number" id="distance" value="140">
+    </label>
+
+    <button onclick="ajouterTrajet()">Ajouter trajet</button>
+    <button onclick="resetHistorique()">🔄 Réinitialiser</button>
+  </div>
+
+  <h3>Récapitulatif des trajets</h3>
+  <table id="recap">
+    <tr>
+      <th>Date</th>
+      <th>Conducteur</th>
+      <th>Participants</th>
+      <th>Coût total (€)</th>
+      <th>Part individuelle (€)</th>
+      <th>Maxime</th>
+      <th>Vincent</th>
+      <th>Toi</th>
+    </tr>
+  </table>
+
+  <h3>Bilan cumulé</h3>
+  <table class="totaux" id="bilan">
+    <tr>
+      <th>Qui</th>
+      <th>Doit (€)</th>
+      <th>A recevoir (€)</th>
+      <th>Solde (€)</th>
+    </tr>
+    <tr>
+      <td>Toi</td>
+      <td id="doit_toi">0.00</td>
+      <td id="recoit_toi">0.00</td>
+      <td id="solde_toi">0.00</td>
+    </tr>
+    <tr>
+      <td>Maxime</td>
+      <td id="doit_maxime">0.00</td>
+      <td id="recoit_maxime">0.00</td>
+      <td id="solde_maxime">0.00</td>
+    </tr>
+    <tr>
+      <td>Vincent</td>
+      <td id="doit_vincent">0.00</td>
+      <td id="recoit_vincent">0.00</td>
+      <td id="solde_vincent">0.00</td>
+    </tr>
+  </table>
+
+<script>
+  const recap = document.getElementById("recap");
+
+  let comptes = {
+    "Toi": { doit: 0, recoit: 0 },
+    "Maxime": { doit: 0, recoit: 0 },
+    "Vincent": { doit: 0, recoit: 0 }
+  };
+
+  let trajets = []; // liste des trajets sauvegardés
+
+  function ajouterTrajet() {
+    const voiture = document.getElementById("voiture").value;
+    const prix = parseFloat(document.getElementById("prix").value);
+    const distance = parseFloat(document.getElementById("distance").value);
+    const dateTrajet = document.getElementById("dateTrajet").value || new Date().toLocaleDateString();
+
+    const conso = 6.0;
+
+    let participants = [];
+    if (document.getElementById("toi").checked) participants.push("Toi");
+    if (document.getElementById("maxime").checked) participants.push("Maxime");
+    if (document.getElementById("vincent").checked) participants.push("Vincent");
+
+    const nb = participants.length;
+    if (nb < 2) {
+      alert("Il faut au moins un conducteur et un passager !");
+      return;
+    }
+
+    const cout = distance * conso / 100 * prix;
+    const part = cout / nb;
+    const conducteur = (voiture === "toi") ? "Toi" : "Vincent";
+
+    let soldes = { "Toi": "-", "Maxime": "-", "Vincent": "-" };
+
+    participants.forEach(p => {
+      if (p !== conducteur) {
+        soldes[p] = `Doit ${part.toFixed(2)}€`;
+        comptes[p].doit += part;
+        comptes[conducteur].recoit += part;
+      } else {
+        soldes[p] = "A recevoir";
+      }
+    });
+
+    // Ajout en mémoire
+    trajets.push({ date: dateTrajet, conducteur, participants, cout, part, soldes });
+
+    // Sauvegarde
+    localStorage.setItem("trajets", JSON.stringify(trajets));
+    localStorage.setItem("comptes", JSON.stringify(comptes));
+
+    // Rafraîchir l'affichage
+    afficherTrajets();
+    majBilan();
+  }
+
+  function afficherTrajets() {
+    // reset tableau sauf l'en-tête
+    recap.innerHTML = `
+      <tr>
+        <th>Date</th>
+        <th>Conducteur</th>
+        <th>Participants</th>
+        <th>Coût total (€)</th>
+        <th>Part individuelle (€)</th>
+        <th>Maxime</th>
+        <th>Vincent</th>
+        <th>Toi</th>
+      </tr>`;
+    trajets.forEach(t => {
+      let row = recap.insertRow();
+      row.insertCell(0).innerText = t.date;
+      row.insertCell(1).innerText = t.conducteur;
+      row.insertCell(2).innerText = t.participants.join(", ");
+      row.insertCell(3).innerText = t.cout.toFixed(2);
+      row.insertCell(4).innerText = t.part.toFixed(2);
+      row.insertCell(5).innerText = t.soldes["Maxime"];
+      row.insertCell(6).innerText = t.soldes["Vincent"];
+      row.insertCell(7).innerText = t.soldes["Toi"];
+    });
+  }
+
+  function majBilan() {
+    ["Toi","Maxime","Vincent"].forEach(nom => {
+      document.getElementById("doit_"+nom.toLowerCase()).innerText = comptes[nom].doit.toFixed(2);
+      document.getElementById("recoit_"+nom.toLowerCase()).innerText = comptes[nom].recoit.toFixed(2);
+      let solde = comptes[nom].recoit - comptes[nom].doit;
+      document.getElementById("solde_"+nom.toLowerCase()).innerText = solde.toFixed(2);
+    });
+  }
+
+  function resetHistorique() {
+    if(confirm("Voulez-vous vraiment réinitialiser l'historique ?")) {
+      trajets = [];
+      comptes = { "Toi": { doit: 0, recoit: 0 }, "Maxime": { doit: 0, recoit: 0 }, "Vincent": { doit: 0, recoit: 0 }};
+      localStorage.clear();
+      afficherTrajets();
+      majBilan();
+    }
+  }
+
+  // Charger depuis localStorage au démarrage
+  window.onload = () => {
+    if(localStorage.getItem("trajets")) {
+      trajets = JSON.parse(localStorage.getItem("trajets"));
+    }
+    if(localStorage.getItem("comptes")) {
+      comptes = JSON.parse(localStorage.getItem("comptes"));
+    }
+    afficherTrajets();
+    majBilan();
+  };
+</script>
+
+</body>
+</html>
